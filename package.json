@@ -1,6 +1,6 @@
 {
     "name": "@nxg-org/mineflayer-common-sense",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Miscellaneous functions to handle different minecraft events.",
     "keywords": [
         "mineflayer",
