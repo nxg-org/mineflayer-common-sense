@@ -2,6 +2,7 @@ import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import { promisify } from "util";
 import type { Block } from "prismarine-block";
+import md, {Block as mdBlock} from "minecraft-data";
 const sleep = promisify(setTimeout);
 
 export class CommonSense {
@@ -14,7 +15,9 @@ export class CommonSense {
     public requipLastItem: boolean = false;
     public puttingOutFire: boolean = false;
     public MLGing: boolean = false;
+    private waterBlock: mdBlock;
     constructor(public bot: Bot) {
+        this.waterBlock = md(this.bot.version).blocksByName["water"]
         this.bot.on("physicsTick", this.isFallingCheckEasy.bind(this));
         this.bot._client.on("entity_metadata", this.onMetadataFireCheck.bind(this));
         this.bot._client.on("entity_status", this.onStatusFireCheck.bind(this));
@@ -102,7 +105,7 @@ export class CommonSense {
         if (!immediate) await this.bot.waitForTicks(3);
         const block = this.bot.findBlock({
             point: nearbyBlock?.position ?? this.bot.entity.position,
-            matching: (block) => (block.type === 8 || block.type === 9) && block.metadata === 0,
+            matching: (block) => (block.type === this.waterBlock.id) && block.metadata === 0,
             //@ts-expect-error
             useExtraInfo: (block: Block) => {
                 return this.bot.util.world.getBlockAABB(block).distanceTo(this.bot.entity.position, 1.62) < 4;
