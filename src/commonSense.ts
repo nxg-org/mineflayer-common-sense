@@ -115,8 +115,6 @@ export class CommonSense {
         if (block) {
             this.bot.util.move.forceLookAt(block.position.offset(0.5, 0.5, 0.5), true);
             this.bot.activateItem(this.useOffHand);
-        } else {
-            console.log("didn't get block. fuck.");
         }
     }
     async isFallingCheckEasy() {
@@ -142,8 +140,8 @@ export class CommonSense {
         const floored = { x0: Math.floor(spacing.x0), z0: Math.floor(spacing.z0), x1: Math.floor(spacing.x1), z1: Math.floor(spacing.z1) };
         let blocks: Block[] = [];
         const posY = this.bot.entity.position.clone().floored().y;
-        loop1: for (let i = floored.x0; i <= floored.x1; i++) {
-            loop2: for (let j = floored.z0; j <= floored.z1; j++) {
+        for (let i = floored.x0; i <= floored.x1; i++) {
+            for (let j = floored.z0; j <= floored.z1; j++) {
                 loop3: for (let k = posY; k > 0; k--) {
                     const block = this.bot.blockAt(new Vec3(i, k, j));
                     if (!!block && block.type !== 0) {
@@ -170,24 +168,26 @@ export class CommonSense {
         const hand = this.bot.util.inv.getHand(this.useOffHand)
         const water = this.bot.util.inv.getAllItemsExceptCurrent(hand).find((item) => item?.name.includes("water_bucket"));
         const holdingItem = this.bot.util.inv.getHandWithItem(this.useOffHand)?.name.includes("water_bucket");
+        let landingBlock = this.findBlockForWaterPlacement();
         if (!water && !holdingItem) {
             this.MLGing = false;
             return false;
         } else if (!holdingItem && water) await this.bot.util.inv.customEquip(water, hand);
 
         for (let i = 0; i < 120; i++) {
-            const landingBlock = this.findBlockForWaterPlacement();
+            landingBlock = this.findBlockForWaterPlacement();
             if (landingBlock) {
                 await this.bot.util.move.forceLookAt(landingBlock.position.offset(0.5, 0.5, 0.5), true);
             }
 
-            if (this.bot.entity.position.y <= (landingBlock?.position.y ?? 0) + 3) {
-                this.bot.activateItem(this.useOffHand);
+
+            if (this.bot.entity.position.y <= landingBlock.position.y + 3) {
+                if (landingBlock.type !== this.waterBlock.id)  this.bot.activateItem(this.useOffHand);
                 break;
             }
             await this.bot.waitForTicks(1);
         }
-        await this.pickUpWater(null, 2);
+        if (landingBlock.type !== this.waterBlock.id) await this.pickUpWater(null, 2);
         this.MLGing = false;
         return true;
     }

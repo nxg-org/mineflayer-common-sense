@@ -1,6 +1,5 @@
 import { createBot } from "mineflayer";
 import commonSense from "./index"
-import { Vec3 } from "vec3";
 
 const bot = createBot({
     username: "common-sense",
