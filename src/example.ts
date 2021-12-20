@@ -11,5 +11,6 @@ const bot = createBot({
 bot.loadPlugin(commonSense)
 bot.once("spawn", () => {
     bot.commonSense.autoRespond = true
+    bot.commonSense.useOffHand = false
 })
 
