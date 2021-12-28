@@ -65,7 +65,7 @@ export class CommonSense {
         }
 
         this.isOnFire = true;
-        while (!this.bot.entity.onGround) await sleep(0);
+        while (!this.bot.entity.onGround) await this.bot.waitForTicks(1);
         if (!this.puttingOutFire && this.autoRespond) this.putOutFire();
     }
 
