@@ -380,7 +380,7 @@ prismarine-biome@^1.1.0, prismarine-biome@^1.1.1:
   resolved "https://registry.yarnpkg.com/prismarine-biome/-/prismarine-biome-1.2.0.tgz#4ae0488991a660d07a3d0d8b3c976fd419fab346"
   integrity sha512-sMeK4HkZkqTWy5kx0qvzvNPz/MmR/V2G9ouhnCjgm2pvckW9QqlyO/H+7RIjdn+jDBlHRteLKKTls76udXsR1A==
 
-prismarine-block@^1.13.1, prismarine-block@^1.13.2, prismarine-block@^1.7.3:
+prismarine-block@^1.13.1, prismarine-block@^1.7.3:
   version "1.13.1"
   resolved "https://registry.yarnpkg.com/prismarine-block/-/prismarine-block-1.13.1.tgz#1734060be3256f1e325cfaf09d1a1aafca741055"
   integrity sha512-V0J03UG4wK7G7idXsFqt84DvQ90sPZQLi64T3ZmOXmRcjjIVahiAUzqfmeO7S8GJ/3NQCJ9b9cRzGNRtl/3a5A==
