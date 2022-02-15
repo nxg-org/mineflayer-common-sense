@@ -25,7 +25,7 @@
         "@nxg-org/mineflayer-util-plugin": "^1.4.0",
         "minecraft-data": "^2.113.0",
         "mineflayer": "^4.0.0",
-        "prismarine-block": "^1.13.2",
+        "prismarine-block": "^1.13.1",
         "vec3": "^0.1.7"
     },
     "devDependencies": {
