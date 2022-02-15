@@ -108,7 +108,7 @@ export class CommonSense {
             matching: (block) => (block.type === this.waterBlock.id) && block.metadata === 0,
             //@ts-expect-error
             useExtraInfo: (block: Block) => {
-                return this.bot.util.world.getBlockAABB(block).distanceTo(this.bot.entity.position, 1.62) < 4;
+                return this.bot.util.world.getBlockAABB(block).distanceToVec(this.bot.entity.position.offset(0, 1.62, 0)) < 4;
             },
             maxDistance: maxDistance,
         });
@@ -131,11 +131,13 @@ export class CommonSense {
 
     private findBlockForWaterPlacement() {
         const pos = this.bot.entity.position.offset(this.bot.entity.velocity.x, 0, this.bot.entity.velocity.z);
-        const aabb = this.bot.util.entity.getEntityAABB({
+        const aabb = this.bot.util.entity.getEntityAABBRaw(
+            {
             position: pos,
             height: this.bot.entity.height,
             width: 0.3,
-        });
+        }
+        );
         const spacing = { x0: aabb.minX, z0: aabb.minZ, x1: aabb.maxX, z1: aabb.maxZ };
         const floored = { x0: Math.floor(spacing.x0), z0: Math.floor(spacing.z0), x1: Math.floor(spacing.x1), z1: Math.floor(spacing.z1) };
         let blocks: Block[] = [];
@@ -156,7 +158,7 @@ export class CommonSense {
         blocks = blocks.filter((b) => b.position.y === maxY);
 
         const block = blocks.sort(
-            (a, b) => this.bot.util.world.getBlockAABB(b).distanceTo(pos) - this.bot.util.world.getBlockAABB(a).distanceTo(pos)
+            (a, b) => this.bot.util.world.getBlockAABB(b).distanceToVec(pos) - this.bot.util.world.getBlockAABB(a).distanceToVec(pos)
         )[0];
         // console.log(block.position, this.bot.entity.position, this.bot.entity.position.distanceTo(block.position).toFixed(2));
         return block;
