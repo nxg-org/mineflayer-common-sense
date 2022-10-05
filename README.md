@@ -1,6 +1,7 @@
 # Mineflayer Common Sense
 
 
+### Basic Usage
 ```ts
 import { createBot } from "mineflayer";
 import commonSense from "@nxg-org/mineflayer-common-sense"
@@ -27,3 +28,9 @@ bot.once("spawn", () => {
 })
 
 ```
+
+This module is meant to provide basic responses to events that inconvenience the bot and are trivial to implement.
+
+
+
+Because I hate writing README's for whatever reason, the publicly accessible methods are the public functions in ``src/example.ts``. The names are self explanatory.
