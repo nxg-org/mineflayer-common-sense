@@ -6,7 +6,7 @@
 import { createBot } from "mineflayer";
 import commonSense from "@nxg-org/mineflayer-common-sense"
 
-const bot = createBot( { ... });
+const bot = createBot({ ... });
 
 bot.loadPlugin(commonSense)
 
