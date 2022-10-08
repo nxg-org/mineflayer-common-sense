@@ -35,24 +35,36 @@ export class CommonSense {
         Object.assign(this.options, options);
     }
 
+    public  isFallingCheckEasy = async () => {
+       
+        if (!this.options.fallCheck) return;
+        if (this.bot.entity.velocity.y >= -0.6) {
+            this.isFalling = false;
+            return;
+        }
+        this.isFalling = true;
+        if (!this.MLGing && this.options.autoRespond && this.isFalling) {
+            await this.waterBucket();
+        }
+    }
+
 
     private onMetadataFireCheck = async (packet: any) => {
         if (!this.options.fireCheck) return;
         if (!packet.entityId) return;
         const entity = this.bot.entities[packet.entityId];
         if (!entity || entity !== this.bot.entity) return;
-        // if ((entity.metadata[0] as any).value !== 1) {
         const wantedKey = (packet.metadata as any[]).findIndex((md) => md.key === 0);
         if (wantedKey === -1) return;
-        if (packet.metadata[wantedKey]?.value !== 1) {
+        if (packet.metadata[wantedKey]?.value as number & 0x01 !== 0x01) {
             this.isOnFire = false;
             return;
         }
-        // }
+
 
         this.isOnFire = true;
         while (!this.bot.entity.onGround) await this.bot.waitForTicks(1);
-        if (!this.puttingOutFire && this.options.autoRespond) this.putOutFire();
+        if (!this.puttingOutFire && this.options.autoRespond && this.isOnFire) this.putOutFire();
     }
 
     private onStatusFireCheck = async (packet: any) => {
@@ -67,7 +79,7 @@ export class CommonSense {
 
         this.isOnFire = true;
         while (!this.bot.entity.onGround) await this.bot.waitForTicks(1);
-        if (!this.puttingOutFire && this.options.autoRespond) this.putOutFire();
+        if (!this.puttingOutFire && this.options.autoRespond && this.isOnFire) this.putOutFire();
     }
 
     public async putOutFire () {
@@ -128,19 +140,6 @@ export class CommonSense {
         }
     }
 
-    public  isFallingCheckEasy = async () => {
-       
-        if (!this.options.fallCheck) return;
-        if (this.bot.entity.velocity.y >= -0.6) {
-            this.isFalling = false;
-            return;
-        }
-        this.isFalling = true;
-        if (!this.MLGing && this.options.autoRespond) {
-            await this.waterBucket();
-        }
-    }
-
     private findBlockForWaterPlacement(): Block | null {
         const pos = this.bot.entity.position //.offset(this.bot.entity.velocity.x, 0, this.bot.entity.velocity.z);
         const aabb = this.bot.util.entity.getEntityAABBRaw(
@@ -150,15 +149,13 @@ export class CommonSense {
             width: 0.599, // we are avoiding colliding with adjacent blocks.
         }
         );
-        const spacing = { x0: aabb.minX, z0: aabb.minZ, y0: aabb.minY, x1: aabb.maxX, z1: aabb.maxZ };
-        const floored = { x0: Math.floor(spacing.x0), z0: Math.floor(spacing.z0), x1: Math.floor(spacing.x1), z1: Math.floor(spacing.z1) };
+        const floored = { x0: Math.floor(aabb.minX), z0: Math.floor(aabb.minZ), x1: Math.floor(aabb.maxX), z1: Math.floor(aabb.maxZ) };
         let blocks: Block[] = [];
-        const posY = this.bot.entity.position.clone().floored().y;
+        const posY = Math.floor(this.bot.entity.position.y);
         for (let i = floored.x0; i <= floored.x1; i++) {
             for (let j = floored.z0; j <= floored.z1; j++) {
                 loop3: for (let k = posY; k >= 0; k--) {
                     const block = this.bot.blockAt(new Vec3(i, k, j));
-                    if (block?.name === "crafting_table") console.log(block);
                     if (!!block && block.type !== this.blocksByName.water.id && block.type !== this.blocksByName.air.id) {
                         blocks.push(block);
                         break loop3;
@@ -167,7 +164,7 @@ export class CommonSense {
             }
         }
 
-        const maxY = Math.max(...blocks.map((b) => b.position.y).filter(y => y < spacing.y0));
+        const maxY = Math.max(...blocks.map((b) => b.position.y).filter(y => y < aabb.minY));
         blocks = blocks.filter((b) => b.position.y === maxY);
 
         const block = blocks.sort(
