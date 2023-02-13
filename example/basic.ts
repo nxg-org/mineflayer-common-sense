@@ -1,5 +1,5 @@
 import { createBot } from "mineflayer";
-import commonSense from "./index"
+import commonSense from "../src/index"
 
 const bot = createBot({
     username: "common-sense",
