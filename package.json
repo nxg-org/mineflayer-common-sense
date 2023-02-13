@@ -22,7 +22,8 @@
         "example": "ts-node -T example/basic.ts"
     },
     "dependencies": {
-        "@nxg-org/mineflayer-util-plugin": "^1.6.0"
+        "@nxg-org/mineflayer-util-plugin": "^1.6.0",
+        "js-levenshtein": "^1.1.6"
     },
     "devDependencies": {
         "@types/node": "^16.11.11",

@@ -15,5 +15,19 @@ bot.once("spawn", () => {
         fireCheck: true,
         useOffhand: true
     })
+
+
+    bot.on("chat", (user, message) => {
+
+        const [cmd, ...args] = message.trim().split(' ');
+
+        switch (cmd) {
+
+
+            case "pickup":
+                bot.commonSense.findLocalWater(undefined, 10);
+        }
+
+    })
 })
 
