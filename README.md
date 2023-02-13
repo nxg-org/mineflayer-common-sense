@@ -33,4 +33,4 @@ This module is meant to provide basic responses to events that inconvenience the
 
 
 
-Because I hate writing README's for whatever reason, the publicly accessible methods are the public functions in ``src/example.ts``. The names are self explanatory.
+Because I hate writing README's for whatever reason, the publicly accessible methods are the public functions in ``example/basic.ts``. The names are self explanatory.
