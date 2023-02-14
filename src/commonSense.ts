@@ -1,27 +1,52 @@
-import type { Bot } from "mineflayer";
+import type { Bot, BotEvents } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
-import type { Block as mdBlock, Item as string } from "minecraft-data";
+import type {Entity} from "prismarine-entity";
+import type { Block as mdBlock } from "minecraft-data";
 import { AABBUtils } from "@nxg-org/mineflayer-util-plugin";
+
+const { Physics, PlayerState } = require("prismarine-physics");
 const levenshtein: (str0: string, str1: string) => number = require("js-levenshtein");
 
 const sleep = (ms: number) => new Promise((res, rej) => setTimeout(res, ms));
 
+
+type MlgItemInfo = {
+  name: string;
+  maxDistance?: number;
+  allowedBlocks?: string[];
+};
 export interface ICommonSenseOptions {
   autoRespond: boolean;
   fallCheck: boolean;
   fireCheck: boolean;
   useOffhand: boolean;
-  mlgItems: string[];
+  reach: number;
+  mlgItems: MlgItemInfo[];
+  mlgVehicles: string[];
+  mlgMountFirst: boolean;
+  strictMlgNameMatch: boolean;
+  strictMlgBlockMatch: boolean;
 }
 
 export const DefaultCommonSenseOptions: ICommonSenseOptions = {
   autoRespond: false,
   fallCheck: false,
+  mlgMountFirst: false,
   fireCheck: false,
   useOffhand: false,
-  mlgItems: ["sweet_berries", "water_bucket"] as string[],
+  reach: 4,
+  mlgItems: [
+    { name: "slime_block" },
+    { name: "sweet_berries", allowedBlocks: ["grass"] },
+    { name: "boat", maxDistance: 30 },
+    { name: "water_bucket" },
+    
+  ] as MlgItemInfo[],
+  mlgVehicles: ["horse", "boat", "donkey", "mule", "minecart"] as string[],
+  strictMlgNameMatch: false,
+  strictMlgBlockMatch: false,
 } as const;
 
 export class CommonSense {
@@ -30,6 +55,7 @@ export class CommonSense {
   public requipLastItem: boolean = false;
   public puttingOutFire: boolean = false;
   public MLGing: boolean = false;
+  public mountMLGing: boolean = false;
   public options: ICommonSenseOptions;
 
   private blocksByName: { [name: string]: mdBlock };
@@ -41,9 +67,14 @@ export class CommonSense {
     this.bot.on("physicsTick", this.isFallingCheckEasy);
     this.bot._client.on("entity_metadata", this.onMetadataFireCheck);
     this.bot._client.on("entity_status", this.onStatusFireCheck);
+    this.bot.on("death", () => {
+      this.MLGing = false;
+      this.isFalling = false;
+    });
     this.causesFire = new Set();
     this.causesFire.add(this.blocksByName.lava.id);
     this.causesFire.add(this.blocksByName.fire.id);
+    if (!this.options.mlgVehicles.includes("boat")) this.options.mlgVehicles.push("boat");
   }
 
   public setOptions(options: Partial<ICommonSenseOptions>) {
@@ -59,7 +90,7 @@ export class CommonSense {
     }
     this.isFalling = true;
     if (!this.MLGing && this.options.autoRespond && this.isFalling) {
-      console.log("mlg res", await this.waterBucket());
+      await this.placementMLG();
     }
   };
 
@@ -76,8 +107,9 @@ export class CommonSense {
     }
 
     this.isOnFire = true;
-    while (!this.bot.entity.onGround) await this.bot.waitForTicks(1);
-    if (!this.puttingOutFire && this.options.autoRespond && this.isOnFire) this.putOutFire();
+    if (!this.options.autoRespond) return;
+    while (!this.bot.entity.onGround || this.MLGing) await this.bot.waitForTicks(1);
+    if (!this.puttingOutFire && this.isOnFire && !(this.bot.entity as any).isInWater) this.putOutFire();
   };
 
   private onStatusFireCheck = async (packet: any) => {
@@ -91,8 +123,9 @@ export class CommonSense {
     }
 
     this.isOnFire = true;
-    while (!this.bot.entity.onGround) await this.bot.waitForTicks(1);
-    if (!this.puttingOutFire && this.options.autoRespond && this.isOnFire) this.putOutFire();
+    if (!this.options.autoRespond) return;
+    while (!this.bot.entity.onGround || this.MLGing) await this.bot.waitForTicks(1);
+    if (!this.puttingOutFire && this.isOnFire && !(this.bot.entity as any).isInWater) this.putOutFire();
   };
 
   public async putOutFire() {
@@ -105,7 +138,7 @@ export class CommonSense {
       this.puttingOutFire = false;
       return false;
     } else if (!holdingItem && water) {
-      await this.bot.util.inv.customEquip(water, hand);
+      await this.bot.equip(water, hand);
     }
 
     if (!this.bot.util.inv.getHandWithItem(this.options.useOffhand)?.name.includes("water_bucket")) {
@@ -113,19 +146,16 @@ export class CommonSense {
       return false;
     }
 
-    const nearbyBlocks = this.reachableFireCauserBlocks();
-    let nearbyBlock = null;
+    const nearbyBlock = this.bot.findBlock({ matching: (block) => this.causesFire.has(block.type), maxDistance: 3 });
 
-    if (nearbyBlocks.length > 0) {
-      nearbyBlock = this.bot.blockAt(nearbyBlocks[0])!;
-
+    if (nearbyBlock) {
       // solid block, meaning it must be fire.
       if (nearbyBlock.diggable) await this.bot.dig(nearbyBlock, true);
       await this.bot.util.move.forceLookAt(nearbyBlock.position.offset(0.5, -1, 0.5));
     } else {
       const placeBlock = this.findMLGPlacementBlock();
       if (placeBlock) {
-        console.log("have placement block, looking there")
+        console.log("have placement block, looking there");
         await this.bot.util.move.forceLookAt(placeBlock.position.offset(0.5, 0.5, 0.5));
       } else {
         await this.bot.util.move.forceLookAt(this.bot.entity.position.offset(0, -1, 0));
@@ -134,23 +164,21 @@ export class CommonSense {
 
     // while (!this.bot.entity.isCollidedVertically) await this.bot.waitForTicks(1);
     this.bot.activateItem(this.options.useOffhand);
-    await this.bot.waitForTicks(3);
-    const waterBlock = await this.findLocalWater(nearbyBlock?.position, 5);
-    if (waterBlock) {
-      console.log("picking up water", waterBlock.position);
-      this.bot.util.move.forceLookAt(waterBlock.position.offset(0.5, 0.5, 0.5), true);
-      await this.bot.waitForTicks(3);
-      this.bot.activateItem(this.options.useOffhand);
-    } else {
-      console.log("cant find block");
-    }
+    const checkPos = nearbyBlock?.position ?? this.bot.entity.position;
+    await waitFor(this.bot, `blockUpdate`, {
+      timeout: 500,
+      listener: (old, nw: Block) =>
+        nw.type === this.bot.registry.blocksByName.water.id && nw.position.xzDistanceTo(checkPos) < 3,
+    });
+    await this.pickUpWater(nearbyBlock?.position, 5);
     this.puttingOutFire = false;
     return true;
   }
 
-  public reachableFireCauserBlocks(maxDistance: number = 3) {
+  public reachableFireCauserBlocks(maxDistance: number = this.options.reach) {
     const eyePos = this.bot.entity.position.offset(0, 1.62, 0);
     return this.bot.findBlocks({
+      maxDistance: 8,
       // placed water will always be on top of wanted block.
       point: this.bot.entity.position,
       matching: (block) =>
@@ -158,7 +186,7 @@ export class CommonSense {
     });
   }
 
-  public async findLocalWater(nearbyBlockPos: Vec3 = this.bot.entity.position, maxDistance: number = 10) {
+  public findLocalWater(nearbyBlockPos: Vec3 = this.bot.entity.position, maxDistance: number = this.options.reach) {
     const eyePos = this.bot.entity.position.offset(0, 1.62, 0);
     return this.bot.findBlock({
       // placed water will always be on top of wanted block.
@@ -168,16 +196,17 @@ export class CommonSense {
         const waterSrcCheck = block.type === this.blocksByName.water.id && block.metadata === 0;
         const waterLoggedBlock = (block as any)._properties.waterlogged;
         const distCheck = AABBUtils.getBlockAABB(block).distanceToVec(eyePos) < maxDistance;
-        if (waterSrcCheck) console.log(block, distCheck, AABBUtils.getBlockAABB(block).distanceToVec(eyePos))
         return (waterSrcCheck || waterLoggedBlock) && distCheck;
       },
       useExtraInfo: true,
     });
-
   }
 
   private findMLGPlacementBlock(): Block | null {
-    const pos = this.bot.entity.position; //.offset(this.bot.entity.velocity.x, 0, this.bot.entity.velocity.z);
+    const playerState: any = new PlayerState(this.bot, this.bot.controlState);
+    (this.bot.physics as any).simulatePlayer(playerState, this.bot.world); // in place transition
+    // const pos = playerState.pos;
+    const pos = this.bot.entity.position
     const aabb = AABBUtils.getEntityAABBRaw({
       position: pos,
       height: this.bot.entity.height,
@@ -217,95 +246,158 @@ export class CommonSense {
 
     // console.log(aabb);
     // console.log("before filter", blocks.map((b) => b.position));
-    blocks = blocks.filter((b) => b.position.y <= aabb.minY);
+    blocks = blocks.filter((b) => b.position.y < aabb.minY);
     const maxY = Math.max(...blocks.map((b) => b.position.y));
     blocks = blocks.filter((b) => b.position.y === maxY);
     // console.log("after filter", blocks.map((b) => b.position));
     const block = blocks.sort(
-      (a, b) => AABBUtils.getBlockAABB(b).distanceToVec(pos) - AABBUtils.getBlockAABB(a).distanceToVec(pos)
+      (a, b) => AABBUtils.getBlockAABB(a).distanceToVec(pos) - AABBUtils.getBlockAABB(b).distanceToVec(pos)
     )[0];
     // console.log(block.position, this.bot.entity.position, this.bot.entity.position.distanceTo(block.position).toFixed(2));
     return block ?? null;
   }
 
-  public getMLGItem() {
-    for (const mlgName of this.options.mlgItems) {
-      const toEquip = this.bot.util.inv.getAllItems().find((item) => item?.name.includes(mlgName));
-      if (toEquip) return toEquip;
+  public getMLGItem(orgHeight: number, landingBlock: Block) {
+    for (const mlgInfo of this.options.mlgItems) {
+      if (mlgInfo.maxDistance !== undefined && mlgInfo.maxDistance < orgHeight - landingBlock.position.y) continue;
+      // console.log(landingBlock, mlgInfo, mlgInfo.allowedBlocks?.some((name) => landingBlock.name.includes(name)));
+
+      if (this.options.strictMlgBlockMatch && mlgInfo.allowedBlocks !== undefined) {
+        if (!mlgInfo.allowedBlocks.some((name) => landingBlock.name === name)) continue;
+      } else if (mlgInfo.allowedBlocks !== undefined) {
+        if (!mlgInfo.allowedBlocks.some((name) => landingBlock.name.includes(name))) {
+          continue;
+        }
+      }
+      if (this.options.strictMlgNameMatch) {
+        const toEquip = this.bot.util.inv.getAllItems().find((item) => item?.name === mlgInfo.name);
+        if (toEquip) return toEquip;
+      } else {
+        const toEquip = this.bot.util.inv.getAllItems().find((item) => item?.name.includes(mlgInfo.name));
+        if (toEquip) return toEquip;
+      }
     }
     return null;
   }
 
-  public async waterBucket() {
-    if (this.MLGing) return true;
 
-    const mlgItem = this.getMLGItem();
-    const heldItem = this.bot.util.inv.getHandWithItem(this.options.useOffhand);
-
-    if (!mlgItem) {
-      console.log("no item!");
-      return false;
-    }
+  private mountEntityFilter = (e: Entity) => {
+    const namecheck = this.options.mlgVehicles.some((name) => e.name?.toLowerCase().includes(name.toLowerCase()));
+    const distCheck = e.position.distanceTo(this.bot.entity.position) < this.options.reach;
+    return namecheck && distCheck;
+  }
+  public async entityMountMLG(override = false) {
+    if (this.MLGing && !override) return true;
 
     this.MLGing = true;
-    this.bot.placeBlock;
-    const hand = this.bot.util.inv.getHand(this.options.useOffhand);
-
-    if (heldItem?.name !== mlgItem.name) {
-      await this.bot.util.inv.customEquip(mlgItem, hand);
-    }
-
-    const placeable = mlgItem.stackSize > 1;
-
-    let landingBlock: Block | null = null;
-    let landingBlockSolid = true;
     for (let i = 0; i < 120; i++) {
-      landingBlock = this.findMLGPlacementBlock();
-      console.log(landingBlock);
-      if (landingBlock) {
-        landingBlockSolid = landingBlock.type !== this.blocksByName.water.id;
-        this.bot.util.move.forceLookAt(landingBlock.position.offset(0.5, 1, 0.5), true);
-        if (this.bot.entity.position.y <= landingBlock.position.y + 3) {
-          console.log("placing!")
-          if (landingBlockSolid) {
-            
-            if (!placeable) this.bot.activateItem(this.options.useOffhand);
-            else
-              console.log(
-                await this.naivePlaceAndCheck(mlgItem, landingBlock, new Vec3(0, 1, 0), {
-                  offhand: this.options.useOffhand,
-                  swingArm: hand,
-                })
-              );
-          }
-          break;
+      const e = this.bot.nearestEntity(this.mountEntityFilter);
+      if (e) {
+        this.bot.util.move.forceLookAt(AABBUtils.getEntityAABB(e).getCenter(), true);
+        if (["horse", "donkey", "mule"].some(name => e.name?.toLowerCase().includes(name))) {
+          this.bot.unequip("hand");
         }
+
+        this.bot.mount(e);
+        await waitFor(this.bot, "mount");
+        this.bot.dismount();
+        break;
       }
 
-      if (this.bot.blockAt(this.bot.entity.position)?.type === this.blocksByName.water.id) {
-        console.log("this shouldn't be triggering.");
-        this.MLGing = false;
-        return true;
-      }
       await this.bot.waitForTicks(1);
     }
 
-    if (landingBlockSolid) {
-      await this.bot.waitForTicks(3);
-      const waterBlock = await this.findLocalWater(landingBlock!.position, 5);
-      if (waterBlock) {
-        console.log("picking up water", waterBlock.position);
-        this.bot.util.move.forceLookAt(waterBlock.position.offset(0.5, 0.5, 0.5), true);
-        await this.bot.waitForTicks(3);
-        this.bot.activateItem(this.options.useOffhand);
-      } else {
-        console.log("cant find block");
-      }
-    }
-
-    console.log("successful mlg");
     this.MLGing = false;
     return true;
+  }
+
+  private findMLGItemType(item: Item) {
+    let type = 1; // placeable block (placeBlock)
+    if (item.stackSize === 1) type--; // 0 for single stack items (activateItem)
+    if (["boat"].some((name) => item!.name.includes(name))) type += 2; // 2 for entitySpawns (placeEntity)
+
+    return type;
+  }
+
+  public async placementMLG(): Promise<boolean> {
+    if (this.MLGing) return true;
+    let landingBlock: Block | null = this.findMLGPlacementBlock();
+    if (!landingBlock) return false; // no blocks til void beneath us...
+
+    const startHeight = this.bot.entity.position.y;
+    let mlgItem = this.getMLGItem(startHeight, landingBlock);
+    const heldItem = this.bot.util.inv.getHandWithItem(this.options.useOffhand);
+
+    if (!mlgItem) return await this.entityMountMLG(true);
+    
+    this.MLGing = true;
+
+    const hand = this.bot.util.inv.getHand(this.options.useOffhand);
+    for (let i = 0; i < 120; i++) {
+      if (this.bot.blockAt(this.bot.entity.position)?.type === this.blocksByName.water.id) {
+        this.MLGing = false;
+        return true;
+      }
+
+      landingBlock = this.findMLGPlacementBlock();
+      if (!landingBlock) return false; // no blocks til void beneath us...
+      
+      mlgItem = this.getMLGItem(startHeight, landingBlock) ?? mlgItem;
+
+      if (heldItem?.name !== mlgItem.name) {
+        await this.bot.equip(mlgItem, hand);
+      }
+
+     
+      if (this.bot.entity.position.y <= landingBlock.position.y + this.options.reach) {
+        this.bot.util.move.forceLookAt(landingBlock.position.offset(0.5, 1, 0.5), true);
+        if (landingBlock.type !== this.blocksByName.water.id) break;
+      }
+
+      await this.bot.waitForTicks(1);
+    }
+
+    switch (this.findMLGItemType(mlgItem)) {
+      case 0:
+        this.bot.activateItem(this.options.useOffhand);
+        if (mlgItem.name === "water_bucket") {
+          await waitFor(this.bot, `blockUpdate`, {
+            timeout: 500,
+            listener: (old, nw: Block) =>
+              nw.type === this.bot.registry.blocksByName.water.id &&
+              nw.position.xzDistanceTo(this.bot.entity.position) < 2,
+          });
+          await this.pickUpWater(landingBlock!.position, 5);
+        }
+        break;
+      case 1:
+        await this.naivePlaceAndCheck(mlgItem, landingBlock, new Vec3(0, 1, 0), {
+          offhand: this.options.useOffhand,
+          swingArm: hand,
+        });
+        break;
+      case 2:
+        if (!this.bot.nearestEntity(this.mountEntityFilter)) {
+          this.bot.placeEntity(landingBlock, new Vec3(0, 1, 0));
+        }
+        return await this.entityMountMLG(true);
+        // return this.entityMountMLG(true);
+    }
+
+    this.MLGing = false;
+    return true;
+  }
+
+  private pickUpWater(pos: Vec3 = this.bot.entity.position, dist: number = this.options.reach) {
+    const waterBlock = this.findLocalWater(pos, dist);
+    if (waterBlock) {
+      console.log("picking up water", waterBlock.position);
+      this.bot.util.move.forceLookAt(waterBlock.position.offset(0.5, 0.5, 0.5), true);
+      if (this.bot.util.inv.getHandWithItem(this.bot.commonSense.options.useOffhand)?.name === "bucket")
+        this.bot.activateItem(this.options.useOffhand);
+    } else {
+      console.log("cant find block");
+    }
   }
 
   private async naivePlaceAndCheck(item: Item, block: Block, placeVector: Vec3, options: any) {
@@ -329,7 +421,33 @@ export class CommonSense {
       await (this.bot as any)._placeBlockWithOptions(block, placeVector, options);
       return true;
     } catch (e) {
+      console.log(e);
       return ret;
     }
   }
+}
+
+function waitFor<Event extends keyof BotEvents>(
+  bot: Bot,
+  event: Event,
+  options?: { timeout: number; listener?: (...args: Parameters<BotEvents[Event]>) => boolean }
+): Promise<Parameters<BotEvents[Event]>> {
+  return new Promise((res, rej) => {
+    const internal = (...args: Parameters<BotEvents[Event]>) => {
+      if (!!options?.listener) {
+        const ret = options.listener(...args);
+        if (ret) {
+          bot.off(event, internal as any);
+          res(args);
+        }
+      } else {
+        bot.off(event, internal as any);
+        res(args);
+      }
+    };
+    bot.on(event, internal as any);
+    if (!!options?.timeout) {
+      setTimeout(res, options.timeout);
+    }
+  });
 }

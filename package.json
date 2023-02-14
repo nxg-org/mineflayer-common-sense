@@ -23,7 +23,9 @@
     },
     "dependencies": {
         "@nxg-org/mineflayer-util-plugin": "^1.6.0",
-        "js-levenshtein": "^1.1.6"
+        "assert": "^2.0.0",
+        "js-levenshtein": "^1.1.6",
+        "prismarine-physics": "^1.6.0"
     },
     "devDependencies": {
         "@types/node": "^16.11.11",
