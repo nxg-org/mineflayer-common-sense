@@ -12,7 +12,7 @@ bot.loadPlugin(commonSense)
 bot.once("spawn", () => {
     bot.commonSense.setOptions({
         autoRespond: true,
-        fallCheck: true,
+        mlgCheck: true,
         fireCheck: true,
         useOffhand: true
     })

@@ -14,14 +14,15 @@ const sleep = (ms: number) => new Promise((res, rej) => setTimeout(res, ms));
 type MlgItemInfo = {
   name: string;
   maxDistance?: number;
+  disallowedDimensons?: string[];
   allowedBlocks?: string[];
 };
 export interface ICommonSenseOptions {
   autoRespond: boolean;
-  fallCheck: boolean;
-  fireCheck: boolean;
   useOffhand: boolean;
   reach: number;
+  fireCheck: boolean;
+  mlgCheck: boolean | { predictTicks: number; mountOnly?: boolean };
   mlgItems: MlgItemInfo[];
   mlgVehicles: string[];
   mlgMountFirst: boolean;
@@ -31,16 +32,17 @@ export interface ICommonSenseOptions {
 
 export const DefaultCommonSenseOptions: ICommonSenseOptions = {
   autoRespond: false,
-  fallCheck: false,
+  mlgCheck: false,
   mlgMountFirst: false,
   fireCheck: false,
   useOffhand: false,
   reach: 4,
   mlgItems: [
+    { name: "water_bucket", disallowedDimensons: ["nether"] },
     { name: "boat", maxDistance: 30 },
-    { name: "water_bucket" },
-    { name: "slime_block" },
     { name: "sweet_berries", allowedBlocks: ["grass"] },
+    { name: "slime_block" },
+    { name: "hay_block" },
   ] as MlgItemInfo[],
   mlgVehicles: ["horse", "boat", "donkey", "mule", "minecart"] as string[],
   strictMlgNameMatch: false,
@@ -53,7 +55,6 @@ export class CommonSense {
   public requipLastItem: boolean = false;
   public puttingOutFire: boolean = false;
   public MLGing: boolean = false;
-  public mountMLGing: boolean = false;
   public options: ICommonSenseOptions;
 
   private blocksByName: { [name: string]: mdBlock };
@@ -81,14 +82,18 @@ export class CommonSense {
   }
 
   public isFallingCheckEasy = async () => {
-    if (!this.options.fallCheck) return;
+    if (!this.options.mlgCheck) return;
     if (this.bot.entity.velocity.y >= -0.6 || (this.bot.entity as any).isInWater) {
       this.isFalling = false;
       return;
     }
     this.isFalling = true;
     if (!this.MLGing && this.options.autoRespond && this.isFalling) {
-      await this.placementMLG();
+      if (this.options.mlgCheck instanceof Object) {
+        this.options.mlgCheck.mountOnly ? await this.entityMountMLG() : this.placementMLG();
+      } else {
+        await this.placementMLG();
+      }
     }
   };
 
@@ -106,6 +111,7 @@ export class CommonSense {
 
     this.isOnFire = true;
     if (!this.options.autoRespond) return;
+    if (this.bot.game.dimension.includes("nether")) return; // don't handle fire here.
     while (!this.bot.entity.onGround || this.MLGing) await this.bot.waitForTicks(1);
     if (!this.puttingOutFire && this.isOnFire && !(this.bot.entity as any).isInWater) this.putOutFire();
   };
@@ -122,6 +128,7 @@ export class CommonSense {
 
     this.isOnFire = true;
     if (!this.options.autoRespond) return;
+    if (this.bot.game.dimension.includes("nether")) return; // don't handle fire here.
     while (!this.bot.entity.onGround || this.MLGing) await this.bot.waitForTicks(1);
     if (!this.puttingOutFire && this.isOnFire && !(this.bot.entity as any).isInWater) this.putOutFire();
   };
@@ -201,10 +208,15 @@ export class CommonSense {
   }
 
   private findMLGPlacementBlock(): Block | null {
-    const playerState: any = new PlayerState(this.bot, this.bot.controlState);
-    (this.bot.physics as any).simulatePlayer(playerState, this.bot.world); // in place transition
-    // const pos = playerState.pos;
-    const pos = this.bot.entity.position;
+    let pos: Vec3;
+    if (this.options.mlgCheck instanceof Object) {
+      const playerState: any = new PlayerState(this.bot, this.bot.controlState);
+      (this.bot.physics as any).simulatePlayer(playerState, this.bot.world); // in place transition
+      pos = playerState.pos;
+    } else {
+      pos = this.bot.entity.position;
+    }
+
     const aabb = AABBUtils.getEntityAABBRaw({
       position: pos,
       height: this.bot.entity.height,
@@ -220,10 +232,8 @@ export class CommonSense {
     const posY = Math.floor(this.bot.entity.position.y);
 
     const cursor = new Vec3(floored.x0, posY, floored.z0);
-    // console.log(cursor.x, floored.x0, floored.x1, cursor.z, floored.z0, floored.z1);
     for (cursor.x = floored.x0; cursor.x <= floored.x1; cursor.x++) {
       for (cursor.z = floored.z0; cursor.z <= floored.z1; cursor.z++) {
-        // console.log("searching", cursor);
         loop3: for (cursor.y = posY; cursor.y >= (this.bot.game as any).minY; cursor.y--) {
           const block = this.bot.blockAt(cursor);
           if (!block) continue;
@@ -232,7 +242,6 @@ export class CommonSense {
             block.type !== this.blocksByName.air.id &&
             !block.transparent
           ) {
-            // console.log("found at", cursor, block.position);
             blocks.push(block);
             break loop3;
           }
@@ -240,18 +249,12 @@ export class CommonSense {
       }
     }
 
-    // console.log(this.bot.game)
-
-    // console.log(aabb);
-    // console.log("before filter", blocks.map((b) => b.position));
     blocks = blocks.filter((b) => b.position.y < aabb.minY);
     const maxY = Math.max(...blocks.map((b) => b.position.y));
     blocks = blocks.filter((b) => b.position.y === maxY);
-    // console.log("after filter", blocks.map((b) => b.position));
     const block = blocks.sort(
       (a, b) => AABBUtils.getBlockAABB(a).distanceToVec(pos) - AABBUtils.getBlockAABB(b).distanceToVec(pos)
     )[0];
-    // console.log(block.position, this.bot.entity.position, this.bot.entity.position.distanceTo(block.position).toFixed(2));
     return block ?? null;
   }
 
@@ -267,6 +270,11 @@ export class CommonSense {
           continue;
         }
       }
+
+      if (mlgInfo.disallowedDimensons !== undefined) {
+        if (mlgInfo.disallowedDimensons.some(name => this.bot.game.dimension.includes(name))) continue;
+      }
+
       if (this.options.strictMlgNameMatch) {
         const toEquip = this.bot.util.inv.getAllItems().find((item) => item?.name === mlgInfo.name);
         if (toEquip) return toEquip;
@@ -308,6 +316,7 @@ export class CommonSense {
     return true;
   }
 
+  // this logic does not work for spawn eggs.
   private findMLGItemType(item: Item) {
     let type = 1; // placeable block (placeBlock)
     if (item.stackSize === 1) type--; // 0 for single stack items (activateItem)
@@ -390,12 +399,9 @@ export class CommonSense {
   private pickUpWater(pos: Vec3 = this.bot.entity.position, dist: number = this.options.reach) {
     const waterBlock = this.findLocalWater(pos, dist);
     if (waterBlock) {
-      console.log("picking up water", waterBlock.position);
       this.bot.util.move.forceLookAt(waterBlock.position.offset(0.5, 0.5, 0.5), true);
       if (this.bot.util.inv.getHandWithItem(this.bot.commonSense.options.useOffhand)?.name === "bucket")
         this.bot.activateItem(this.options.useOffhand);
-    } else {
-      console.log("cant find block");
     }
   }
 
@@ -408,7 +414,6 @@ export class CommonSense {
     const listener = (oldBlock: Block | null, newBlock: Block) => {
       if (oldBlock?.type === newBlock.type) {
         if (levenshtein(item.name, oldBlock.name) < 8) {
-          console.log("same block from item");
           ret = true;
         }
       }
@@ -420,7 +425,6 @@ export class CommonSense {
       await (this.bot as any)._placeBlockWithOptions(block, placeVector, options);
       return true;
     } catch (e) {
-      console.log(e);
       return ret;
     }
   }
