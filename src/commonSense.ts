@@ -2,7 +2,7 @@ import type { Bot, BotEvents } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
-import type {Entity} from "prismarine-entity";
+import type { Entity } from "prismarine-entity";
 import type { Block as mdBlock } from "minecraft-data";
 import { AABBUtils } from "@nxg-org/mineflayer-util-plugin";
 
@@ -10,7 +10,6 @@ const { Physics, PlayerState } = require("prismarine-physics");
 const levenshtein: (str0: string, str1: string) => number = require("js-levenshtein");
 
 const sleep = (ms: number) => new Promise((res, rej) => setTimeout(res, ms));
-
 
 type MlgItemInfo = {
   name: string;
@@ -42,9 +41,6 @@ export const DefaultCommonSenseOptions: ICommonSenseOptions = {
     { name: "water_bucket" },
     { name: "slime_block" },
     { name: "sweet_berries", allowedBlocks: ["grass"] },
-
-
-    
   ] as MlgItemInfo[],
   mlgVehicles: ["horse", "boat", "donkey", "mule", "minecart"] as string[],
   strictMlgNameMatch: false,
@@ -208,7 +204,7 @@ export class CommonSense {
     const playerState: any = new PlayerState(this.bot, this.bot.controlState);
     (this.bot.physics as any).simulatePlayer(playerState, this.bot.world); // in place transition
     // const pos = playerState.pos;
-    const pos = this.bot.entity.position
+    const pos = this.bot.entity.position;
     const aabb = AABBUtils.getEntityAABBRaw({
       position: pos,
       height: this.bot.entity.height,
@@ -282,12 +278,11 @@ export class CommonSense {
     return null;
   }
 
-
   private mountEntityFilter = (e: Entity) => {
     const namecheck = this.options.mlgVehicles.some((name) => e.name?.toLowerCase().includes(name.toLowerCase()));
     const distCheck = e.position.distanceTo(this.bot.entity.position) < this.options.reach;
     return namecheck && distCheck;
-  }
+  };
   public async entityMountMLG(override = false) {
     if (this.MLGing && !override) return true;
 
@@ -296,7 +291,7 @@ export class CommonSense {
       const e = this.bot.nearestEntity(this.mountEntityFilter);
       if (e) {
         this.bot.util.move.forceLookAt(AABBUtils.getEntityAABB(e).getCenter(), true);
-        if (["horse", "donkey", "mule"].some(name => e.name?.toLowerCase().includes(name))) {
+        if (["horse", "donkey", "mule"].some((name) => e.name?.toLowerCase().includes(name))) {
           this.bot.unequip("hand");
         }
 
@@ -331,7 +326,7 @@ export class CommonSense {
     const heldItem = this.bot.util.inv.getHandWithItem(this.options.useOffhand);
 
     if (!mlgItem) return await this.entityMountMLG(true);
-    
+
     this.MLGing = true;
 
     const hand = this.bot.util.inv.getHand(this.options.useOffhand);
@@ -343,14 +338,13 @@ export class CommonSense {
 
       landingBlock = this.findMLGPlacementBlock();
       if (!landingBlock) return false; // no blocks til void beneath us...
-      
+
       mlgItem = this.getMLGItem(startHeight, landingBlock) ?? mlgItem;
 
       if (heldItem?.name !== mlgItem.name) {
         await this.bot.equip(mlgItem, hand);
       }
 
-     
       if (this.bot.entity.position.y <= landingBlock.position.y + this.options.reach) {
         this.bot.util.move.forceLookAt(landingBlock.position.offset(0.5, 1, 0.5), true);
         if (landingBlock.type !== this.blocksByName.water.id) break;
@@ -380,10 +374,13 @@ export class CommonSense {
         break;
       case 2:
         if (!this.bot.nearestEntity(this.mountEntityFilter)) {
-          (this.bot as any)._placeEntityWithOptions(landingBlock, new Vec3(0, 1, 0), {offhand: this.options.useOffhand, swingArm: hand});
+          (this.bot as any)._placeEntityWithOptions(landingBlock, new Vec3(0, 1, 0), {
+            offhand: this.options.useOffhand,
+            swingArm: hand,
+          });
         }
         return await this.entityMountMLG(true);
-        // return this.entityMountMLG(true);
+      // return this.entityMountMLG(true);
     }
 
     this.MLGing = false;
