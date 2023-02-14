@@ -38,10 +38,12 @@ export const DefaultCommonSenseOptions: ICommonSenseOptions = {
   useOffhand: false,
   reach: 4,
   mlgItems: [
-    { name: "slime_block" },
-    { name: "sweet_berries", allowedBlocks: ["grass"] },
     { name: "boat", maxDistance: 30 },
     { name: "water_bucket" },
+    { name: "slime_block" },
+    { name: "sweet_berries", allowedBlocks: ["grass"] },
+
+
     
   ] as MlgItemInfo[],
   mlgVehicles: ["horse", "boat", "donkey", "mule", "minecart"] as string[],
@@ -378,7 +380,7 @@ export class CommonSense {
         break;
       case 2:
         if (!this.bot.nearestEntity(this.mountEntityFilter)) {
-          this.bot.placeEntity(landingBlock, new Vec3(0, 1, 0));
+          (this.bot as any)._placeEntityWithOptions(landingBlock, new Vec3(0, 1, 0), {offhand: this.options.useOffhand, swingArm: hand});
         }
         return await this.entityMountMLG(true);
         // return this.entityMountMLG(true);

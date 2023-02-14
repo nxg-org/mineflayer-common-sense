@@ -14,7 +14,7 @@ bot.once("spawn", () => {
         autoRespond: true,
         fallCheck: true,
         fireCheck: true,
-        useOffhand: false
+        useOffhand: true
     })
 
 
