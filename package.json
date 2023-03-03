@@ -28,7 +28,7 @@
         "prismarine-physics": "^1.6.0"
     },
     "devDependencies": {
-        "@types/node": "^16.11.11",
+        "@types/node": "^18.14.5",
         "mineflayer": "^4.8.0",
         "typescript": "^4.5.2"
     }
