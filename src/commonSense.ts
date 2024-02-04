@@ -4,7 +4,7 @@ import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
 import type { Entity } from "prismarine-entity";
 import type { Block as mdBlock } from "minecraft-data";
-import { AABBUtils } from "@nxg-org/mineflayer-util-plugin";
+import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
 
 const { Physics, PlayerState } = require("prismarine-physics");
 const levenshtein: (str0: string, str1: string) => number = require("js-levenshtein");
@@ -295,7 +295,7 @@ export class CommonSense {
     if (this.MLGing && !override) return true;
 
     this.MLGing = true;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 1000; i++) {
       const e = this.bot.nearestEntity(this.mountEntityFilter);
       if (e) {
         this.bot.util.move.forceLookAt(AABBUtils.getEntityAABB(e).getCenter(), true);
@@ -339,7 +339,7 @@ export class CommonSense {
     this.MLGing = true;
 
     const hand = this.bot.util.inv.getHand(this.options.useOffhand);
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 1000; i++) {
       if (this.bot.blockAt(this.bot.entity.position)?.type === this.blocksByName.water.id) {
         this.MLGing = false;
         return true;
@@ -372,6 +372,13 @@ export class CommonSense {
               nw.type === this.bot.registry.blocksByName.water.id &&
               nw.position.xzDistanceTo(this.bot.entity.position) < 2,
           });
+
+          try {
+            await this.waitForBBCollision(landingBlock!.position, 500);
+          } catch {
+            return false;
+          }
+          
           await this.pickUpWater(landingBlock!.position, 5);
         }
         break;
@@ -427,6 +434,23 @@ export class CommonSense {
     } catch (e) {
       return ret;
     }
+  }
+
+  private waitForBBCollision(bPos: Vec3, timeout: number = 500) {
+    const bb = AABB.fromVecs(bPos, bPos.offset(1, 1, 1));
+    
+    return new Promise<void>((res, rej) => {
+      const listener = (pos: Vec3) => {
+        const bb1 = AABBUtils.getPlayerAABB(this.bot.entity);
+        if (bb.collides(bb1)) {
+          this.bot.off("move", listener);
+          res();
+        }
+      }
+
+      this.bot.on("move", listener);
+      setTimeout(rej, timeout);
+    })
   }
 }
 

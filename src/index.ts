@@ -12,5 +12,5 @@ declare module "mineflayer" {
 export default function plugin(bot: Bot) {
     if (!bot.util) bot.loadPlugin(utilPlugin)
     bot.commonSense = new CommonSense(bot);
-    bot.loadPlugin(inject)
+    // bot.loadPlugin(inject)
 }
